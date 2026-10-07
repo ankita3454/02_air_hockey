@@ -8,6 +8,7 @@ a goal is incomplete. That's what Tasks 2-4 fix/add.
 """
 
 import random
+import math 
 
 from game.puck import Puck
 from game.paddle import Paddle
@@ -61,13 +62,20 @@ class GameEngine:
     def update(self):
         self.ai.update(self.computer, self.puck)
 
-        self.puck.move()
-        self.puck.bounce_off_walls(HEIGHT, MARGIN)
+        # Substep so the puck never moves more than half its radius per
+        # step -> no tunneling through paddles or walls at high speed.
+        speed = math.hypot(self.puck.vx, self.puck.vy)
+        steps = max(1, math.ceil(speed / (self.puck.radius * 0.5)))
 
-        handle_paddle_collision(self.puck, self.player)
-        handle_paddle_collision(self.puck, self.computer)
+        for _ in range(steps):
+            self.puck.x += self.puck.vx / steps
+            self.puck.y += self.puck.vy / steps
+            self.puck.bounce_off_walls(HEIGHT, MARGIN)
 
-        self._handle_goals()
+            handle_paddle_collision(self.puck, self.player)
+            handle_paddle_collision(self.puck, self.computer)
+
+            self._handle_goals()
 
     def _handle_goals(self):
         if self.puck.x - self.puck.radius < MARGIN:
