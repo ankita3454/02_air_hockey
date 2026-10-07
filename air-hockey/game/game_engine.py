@@ -2,23 +2,19 @@
 GameEngine: owns the puck, both paddles, and the computer AI, and runs
 one frame's worth of game logic.
 
-Starter version: the puck bounces around and paddles can hit it, but
-there is no scoring, no match timer, and the reset that happens after
-a goal is incomplete. That's what Tasks 2-4 fix/add.
 """
 
 import random
 import math 
-
 import pygame
-
-MATCH_DURATION_MS = 30_000
 
 from game.puck import Puck
 from game.paddle import Paddle
 from game.ai import ComputerAI
 from game.collisions import handle_paddle_collision
 from game.renderer import WIDTH, HEIGHT, MARGIN, GOAL_TOP, GOAL_BOTTOM
+
+MATCH_DURATION_MS = 30_000
 
 PLAYER_SPEED = 6
 PUCK_RADIUS = 12
@@ -52,9 +48,10 @@ class GameEngine:
         self.game_over = False
         self.start_ticks = pygame.time.get_ticks()
 
-    def _launch_puck(self):
+    def _launch_puck(self, direction=None):
         angle_choices = [0.3, 0.6, -0.3, -0.6]
-        direction = random.choice([-1, 1])
+        if direction is None:
+            direction = random.choice([-1, 1])
         vy_factor = random.choice(angle_choices)
         self.puck.vx = INITIAL_PUCK_SPEED * direction
         self.puck.vy = INITIAL_PUCK_SPEED * vy_factor
@@ -78,7 +75,6 @@ class GameEngine:
         self.player.move_by(dx, dy)
 
     def update(self):
-        
         if self.game_over:
             return
         if self._remaining_ms() <= 0:
@@ -97,30 +93,33 @@ class GameEngine:
             handle_paddle_collision(self.puck, self.player)
             handle_paddle_collision(self.puck, self.computer)
 
-            self._handle_goals()
+            if self._handle_goals():   # goal scored -> puck already reset, stop this frame
+                break
 
     def _handle_goals(self):
-        # Left goal: puck went in on the player's side -> computer scores.
+        """Returns True if a goal was scored this call."""
+        # Left goal: player conceded -> computer scores, serve toward player.
         if self.puck.x - self.puck.radius < MARGIN:
             if GOAL_TOP < self.puck.y < GOAL_BOTTOM:
                 self.computer_score += 1
-                self._reset_puck()
-            else:
-                self.puck.x = MARGIN + self.puck.radius
-                self.puck.vx = -self.puck.vx
-        # Right goal: puck went in on the computer's side -> player scores.
+                self._reset_puck(toward=-1)
+                return True
+            self.puck.x = MARGIN + self.puck.radius
+            self.puck.vx = -self.puck.vx
+        # Right goal: computer conceded -> player scores, serve toward computer.
         elif self.puck.x + self.puck.radius > WIDTH - MARGIN:
             if GOAL_TOP < self.puck.y < GOAL_BOTTOM:
                 self.player_score += 1
-                self._reset_puck()
-            else:
-                self.puck.x = WIDTH - MARGIN - self.puck.radius
-                self.puck.vx = -self.puck.vx
+                self._reset_puck(toward=1)
+                return True
+            self.puck.x = WIDTH - MARGIN - self.puck.radius
+            self.puck.vx = -self.puck.vx
+        return False
 
-    def _reset_puck(self):
+    def _reset_puck(self, toward):
+        """Re-center the puck and serve it toward the side that conceded."""
         self.puck.x, self.puck.y = WIDTH / 2, HEIGHT / 2
-        self.puck.vx = 0
-        self.puck.vy = 0
+        self._launch_puck(toward)
 
     def draw(self, surface, font):
         from game import renderer
