@@ -38,6 +38,8 @@ class GameEngine:
             min_y=MARGIN + PADDLE_RADIUS, max_y=HEIGHT - MARGIN - PADDLE_RADIUS,
         )
         self.ai = ComputerAI()
+        self.player_score = 0
+        self.computer_score = 0
 
     def _launch_puck(self):
         angle_choices = [0.3, 0.6, -0.3, -0.6]
@@ -78,14 +80,18 @@ class GameEngine:
             self._handle_goals()
 
     def _handle_goals(self):
+        # Left goal: puck went in on the player's side -> computer scores.
         if self.puck.x - self.puck.radius < MARGIN:
             if GOAL_TOP < self.puck.y < GOAL_BOTTOM:
+                self.computer_score += 1
                 self._reset_puck()
             else:
                 self.puck.x = MARGIN + self.puck.radius
                 self.puck.vx = -self.puck.vx
+        # Right goal: puck went in on the computer's side -> player scores.
         elif self.puck.x + self.puck.radius > WIDTH - MARGIN:
             if GOAL_TOP < self.puck.y < GOAL_BOTTOM:
+                self.player_score += 1
                 self._reset_puck()
             else:
                 self.puck.x = WIDTH - MARGIN - self.puck.radius
@@ -102,3 +108,10 @@ class GameEngine:
         renderer.draw_paddle(surface, self.player, renderer.COLOR_PLAYER)
         renderer.draw_paddle(surface, self.computer, renderer.COLOR_COMPUTER)
         renderer.draw_puck(surface, self.puck)
+
+        # Scores sit just inside the table, either side of the center line.
+        y = MARGIN + 8
+        renderer.draw_text(surface, font, str(self.player_score),
+                           (WIDTH / 2 - 40, y), renderer.COLOR_PLAYER)
+        renderer.draw_text(surface, font, str(self.computer_score),
+                           (WIDTH / 2 + 22, y), renderer.COLOR_COMPUTER)
