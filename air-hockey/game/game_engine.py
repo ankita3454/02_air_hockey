@@ -10,6 +10,10 @@ a goal is incomplete. That's what Tasks 2-4 fix/add.
 import random
 import math 
 
+import pygame
+
+MATCH_DURATION_MS = 30_000
+
 from game.puck import Puck
 from game.paddle import Paddle
 from game.ai import ComputerAI
@@ -24,6 +28,10 @@ INITIAL_PUCK_SPEED = 4.5
 
 class GameEngine:
     def __init__(self):
+        self.reset()
+
+    def reset(self):
+        """Start a fresh match: scores, timer, puck and paddles."""
         self.puck = Puck(WIDTH / 2, HEIGHT / 2, PUCK_RADIUS)
         self._launch_puck()
 
@@ -38,8 +46,11 @@ class GameEngine:
             min_y=MARGIN + PADDLE_RADIUS, max_y=HEIGHT - MARGIN - PADDLE_RADIUS,
         )
         self.ai = ComputerAI()
+
         self.player_score = 0
         self.computer_score = 0
+        self.game_over = False
+        self.start_ticks = pygame.time.get_ticks()
 
     def _launch_puck(self):
         angle_choices = [0.3, 0.6, -0.3, -0.6]
@@ -49,7 +60,12 @@ class GameEngine:
         self.puck.vy = INITIAL_PUCK_SPEED * vy_factor
 
     def handle_input(self, keys_pressed):
-        import pygame
+        if keys_pressed[pygame.K_r]:
+            self.reset()
+            return
+        if self.game_over:
+            return
+
         dx = dy = 0
         if keys_pressed[pygame.K_UP]:
             dy -= PLAYER_SPEED
@@ -62,10 +78,14 @@ class GameEngine:
         self.player.move_by(dx, dy)
 
     def update(self):
-        self.ai.update(self.computer, self.puck)
+        
+        if self.game_over:
+            return
+        if self._remaining_ms() <= 0:
+            self.game_over = True
+            return
 
-        # Substep so the puck never moves more than half its radius per
-        # step -> no tunneling through paddles or walls at high speed.
+        self.ai.update(self.computer, self.puck)
         speed = math.hypot(self.puck.vx, self.puck.vy)
         steps = max(1, math.ceil(speed / (self.puck.radius * 0.5)))
 
@@ -109,9 +129,34 @@ class GameEngine:
         renderer.draw_paddle(surface, self.computer, renderer.COLOR_COMPUTER)
         renderer.draw_puck(surface, self.puck)
 
-        # Scores sit just inside the table, either side of the center line.
         y = MARGIN + 8
         renderer.draw_text(surface, font, str(self.player_score),
                            (WIDTH / 2 - 40, y), renderer.COLOR_PLAYER)
         renderer.draw_text(surface, font, str(self.computer_score),
                            (WIDTH / 2 + 22, y), renderer.COLOR_COMPUTER)
+
+        # Remaining time, centered along the bottom of the table.
+        seconds = math.ceil(self._remaining_ms() / 1000)
+        label = f"Time: {seconds}"
+        w, h = font.size(label)
+        renderer.draw_text(surface, font, label,
+                           (WIDTH / 2 - w / 2, HEIGHT - MARGIN - h - 8))
+
+        if self.game_over:
+            if self.player_score > self.computer_score:
+                msg = "You Win"
+            elif self.computer_score > self.player_score:
+                msg = "Computer Wins"
+            else:
+                msg = "Draw"
+            renderer.draw_banner(surface, font, msg)
+            hint = "Press R to restart"
+            hw, _ = font.size(hint)
+            renderer.draw_text(surface, font, hint,
+                               (WIDTH / 2 - hw / 2, HEIGHT / 2 + 30))
+        
+    def _remaining_ms(self):
+        if self.game_over:
+            return 0
+        elapsed = pygame.time.get_ticks() - self.start_ticks
+        return max(0, MATCH_DURATION_MS - elapsed)
